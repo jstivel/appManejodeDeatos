@@ -6,7 +6,21 @@ import utm
 import streamlit as st
 from io import BytesIO
 import tempfile
+import shutil
 
+def limpiar_directorio_temp():
+    temp_dir = "temp_kmz"
+    
+    if os.path.exists(temp_dir):
+        try:
+            # Eliminar todo el contenido de temp_kmz
+            shutil.rmtree(temp_dir)
+            print(f"Directorio {temp_dir} eliminado correctamente.")
+        except Exception as e:
+            print(f"Error al limpiar el directorio {temp_dir}: {e}")
+        finally:
+            # Crear el directorio de nuevo si es necesario
+            os.makedirs(temp_dir, exist_ok=True)
 def main():
     st.title("Extracción de Coordenadas de Archivos KMZ")
 
@@ -75,6 +89,8 @@ def extraer_coordenadas_de_kmz(kmz_file, formato_salida):
                         coordenadas.append((name.text if name is not None else "Sin nombre", lat_gms, lon_gms))
                     else:
                         coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
+                        # Limpiar el directorio temporal
+    limpiar_directorio_temp()
 
     return coordenadas
 
