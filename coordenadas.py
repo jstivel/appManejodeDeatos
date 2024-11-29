@@ -2,15 +2,28 @@ import os
 import zipfile
 import xml.etree.ElementTree as ET
 from openpyxl import Workbook
-import utm  # Asegúrate de tener instalada esta librería
-
+import utm
 import streamlit as st
 from io import BytesIO
+import tempfile
+import shutil
 
+def limpiar_directorio_temp():
+    temp_dir = "temp_kmz"
+    
+    if os.path.exists(temp_dir):
+        try:
+            # Eliminar todo el contenido de temp_kmz
+            shutil.rmtree(temp_dir)
+            print(f"Directorio {temp_dir} eliminado correctamente.")
+        except Exception as e:
+            print(f"Error al limpiar el directorio {temp_dir}: {e}")
+        finally:
+            # Crear el directorio de nuevo si es necesario
+            os.makedirs(temp_dir, exist_ok=True)
 def main():
-
-    # Interfaz de usuario con Streamlit
     st.title("Extracción de Coordenadas de Archivos KMZ")
+
     # Botón para volver al menú principal
     if st.button("Volver al Menú Principal"):
         st.session_state.pagina_actual = "principal"
@@ -22,68 +35,62 @@ def main():
     # Botón para procesar el archivo
     if kmz_file and formato_salida:
         if st.button("Generar archivo de coordenadas"):
-            # Extraer coordenadas del archivo KMZ
-            coordenadas = extraer_coordenadas_de_kmz(kmz_file, formato_salida)
+            try:
+                # Extraer coordenadas del archivo KMZ
+                coordenadas = extraer_coordenadas_de_kmz(kmz_file, formato_salida)
 
-            # Crear archivo de salida en formato Excel
-            output_path = f"coordenadas_{kmz_file.name}.xlsx"
-            with BytesIO() as output:
-                guardar_coordenadas_en_excel(coordenadas, output, formato_salida)
-                output.seek(0)
+                # Crear archivo de salida en formato Excel
+                with BytesIO() as output:
+                    guardar_coordenadas_en_excel(coordenadas, output, formato_salida)
+                    output.seek(0)
 
-                # Descargar archivo generado
-                st.download_button(
-                    label="Descargar archivo de coordenadas",
-                    data=output,
-                    file_name=output_path,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-
-                st.success(f"Archivo de coordenadas '{output_path}' listo para descargar.")
-
-
+                    # Descargar archivo generado
+                    st.download_button(
+                        label="Descargar archivo de coordenadas",
+                        data=output,
+                        file_name=f"coordenadas_{kmz_file.name}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                    st.success("Archivo generado y listo para descargar.")
+            except Exception as e:
+                st.error(f"Error al procesar el archivo: {e}")
 
 def extraer_coordenadas_de_kmz(kmz_file, formato_salida):
-    # Descomprimir el archivo KMZ
-    with zipfile.ZipFile(kmz_file, 'r') as kmz:
-        kmz.extractall("temp_kmz")
+    # Usar un directorio temporal para descomprimir el KMZ
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with zipfile.ZipFile(kmz_file, 'r') as kmz:
+            kmz.extractall(temp_dir)
 
-    # Buscar el archivo KML dentro del KMZ
-    kml_file = [f for f in os.listdir("temp_kmz") if f.endswith('.kml')][0]
-    kml_path = os.path.join("temp_kmz", kml_file)
+        # Buscar el archivo KML dentro del KMZ
+        kml_file = [f for f in os.listdir(temp_dir) if f.endswith('.kml')][0]
+        kml_path = os.path.join(temp_dir, kml_file)
 
-    tree = ET.parse(kml_path)
-    root = tree.getroot()
-    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+        tree = ET.parse(kml_path)
+        root = tree.getroot()
+        ns = {'kml': 'http://www.opengis.net/kml/2.2'}
 
-    coordenadas = []
+        coordenadas = []
 
-    # Extraer las coordenadas de los Placemark
-    for placemark in root.findall('.//kml:Placemark', ns):
-        name = placemark.find('.//kml:name', ns)
-        coords = placemark.find('.//kml:coordinates', ns)
-        if coords is not None:
-            for coord in coords.text.strip().split():
-                x, y, _ = coord.split(',')  # Descartar la altitud
-                x, y = float(x), float(y)
+        # Extraer las coordenadas de los Placemark
+        for placemark in root.findall('.//kml:Placemark', ns):
+            name = placemark.find('.//kml:name', ns)
+            coords = placemark.find('.//kml:coordinates', ns)
+            if coords is not None:
+                for coord in coords.text.strip().split():
+                    x, y, _ = coord.split(',')  # Descartar la altitud
+                    x, y = float(x), float(y)
 
-                # Convertir las coordenadas según el formato solicitado
-                if formato_salida == "UTM":
-                    coord_este, coord_norte, zona = convertir_a_utm(x, y)
-                    coordenadas.append((name.text if name is not None else "Sin nombre", zona, coord_este, coord_norte))
-                elif formato_salida == "GMS":
-                    lat_gms, lon_gms = convertir_a_gms(x, y)
-                    coordenadas.append((name.text if name is not None else "Sin nombre", lat_gms, lon_gms))
-                else:
-                    coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
-
-    # Limpiar los archivos temporales extraídos
-    try:
-        for f in os.listdir("temp_kmz"):
-            os.remove(os.path.join("temp_kmz", f))
-        os.rmdir("temp_kmz")
-    except PermissionError:
-        print("Algunos archivos no se pudieron eliminar. Asegúrate de que no estén en uso y vuelve a intentarlo.")
+                    # Convertir las coordenadas según el formato solicitado
+                    if formato_salida == "UTM":
+                        coord_este, coord_norte, zona = convertir_a_utm(x, y)
+                        coordenadas.append((name.text if name is not None else "Sin nombre", zona, coord_este, coord_norte))
+                    elif formato_salida == "GMS":
+                        lat_gms, lon_gms = convertir_a_gms(x, y)
+                        coordenadas.append((name.text if name is not None else "Sin nombre", lat_gms, lon_gms))
+                    else:
+                        coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
+                        # Limpiar el directorio temporal
+    limpiar_directorio_temp()
 
     return coordenadas
 
@@ -101,7 +108,7 @@ def convertir_a_gms(lon, lat):
 
     return decimal_a_gms(lat), decimal_a_gms(lon)
 
-def guardar_coordenadas_en_excel(coordenadas, output_path, formato_salida):
+def guardar_coordenadas_en_excel(coordenadas, output, formato_salida):
     workbook = Workbook()
     hoja = workbook.active
     hoja.title = "Coordenadas"
@@ -115,4 +122,8 @@ def guardar_coordenadas_en_excel(coordenadas, output_path, formato_salida):
         for name, lat, lon in coordenadas:
             hoja.append([name, lat, lon])
 
-    workbook.save(output_path)
+    workbook.save(output)
+
+# Ejecutar la aplicación
+if __name__ == "__main__":
+    main()
