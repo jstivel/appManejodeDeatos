@@ -38,7 +38,7 @@ def main():
 
     # Botón para procesar el archivo
     if kmz_file and formato_salida:
-        if st.button("Generar archivo de coordenadas"):
+        if st.button("Generar archivo"):
             try:
                 # Extraer coordenadas del archivo KMZ
                 coordenadas = extraer_coordenadas_de_kmz(kmz_file, formato_salida)
@@ -76,9 +76,6 @@ def main():
                         )
                         
                     st.success("Archivo generado y listo para descargar.")
-                    
-
-                    
 
             except Exception as e:
                 st.error(f"Error al procesar el archivo: {e}")
