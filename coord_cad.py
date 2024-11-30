@@ -1,54 +1,129 @@
-import openpyxl
-from pyproj import Proj, transform
-from pyautocad import Autocad, APoint
+import os
+import zipfile
+import xml.etree.ElementTree as ET
+from openpyxl import Workbook
+import utm
+import streamlit as st
+from io import BytesIO
+import tempfile
+import shutil
 
-def leer_coordenadas_excel(archivo_excel):
-    # Cargar el archivo Excel
-    workbook = openpyxl.load_workbook(archivo_excel)
-    hoja = workbook.active  # Usar la primera hoja
+def limpiar_directorio_temp():
+    temp_dir = "temp_kmz"
+    
+    if os.path.exists(temp_dir):
+        try:
+            # Eliminar todo el contenido de temp_kmz
+            shutil.rmtree(temp_dir)
+            print(f"Directorio {temp_dir} eliminado correctamente.")
+        except Exception as e:
+            print(f"Error al limpiar el directorio {temp_dir}: {e}")
+        finally:
+            # Crear el directorio de nuevo si es necesario
+            os.makedirs(temp_dir, exist_ok=True)
+def main():
+    st.title("Extracción de Coordenadas de Archivos KMZ")
 
-    coordenadas = []
+    # Botón para volver al menú principal
+    if st.button("Volver al Menú Principal"):
+        st.session_state.pagina_actual = "principal"
 
-    # Leer las coordenadas y los nombres desde el archivo Excel
-    for row in hoja.iter_rows(min_row=2, values_only=True):  # Comenzar desde la fila 2
-        nombre, x, y = row[0], row[1], row[2]  # Usar la columna B (X) y C (Y)
-        coordenadas.append((nombre, x, y))
+    # Cargar archivo KMZ
+    kmz_file = st.file_uploader("Cargar archivo KMZ", type=["kmz"])
+    formato_salida = st.selectbox("Seleccionar formato de salida", ["UTM", "GMS", "Decimal"])
+
+    # Botón para procesar el archivo
+    if kmz_file and formato_salida:
+        if st.button("Generar archivo de coordenadas"):
+            try:
+                # Extraer coordenadas del archivo KMZ
+                coordenadas = extraer_coordenadas_de_kmz(kmz_file, formato_salida)
+
+                # Crear archivo de salida en formato Excel
+                with BytesIO() as output:
+                    guardar_coordenadas_en_excel(coordenadas, output, formato_salida)
+                    output.seek(0)
+
+                    # Descargar archivo generado
+                    st.download_button(
+                        label="Descargar archivo de coordenadas",
+                        data=output,
+                        file_name=f"coordenadas_{kmz_file.name}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                    st.success("Archivo generado y listo para descargar.")
+            except Exception as e:
+                st.error(f"Error al procesar el archivo: {e}")
+
+def extraer_coordenadas_de_kmz(kmz_file, formato_salida):
+    # Usar un directorio temporal para descomprimir el KMZ
+    with tempfile.TemporaryDirectory() as temp_dir:
+        with zipfile.ZipFile(kmz_file, 'r') as kmz:
+            kmz.extractall(temp_dir)
+
+        # Buscar el archivo KML dentro del KMZ
+        kml_file = [f for f in os.listdir(temp_dir) if f.endswith('.kml')][0]
+        kml_path = os.path.join(temp_dir, kml_file)
+
+        tree = ET.parse(kml_path)
+        root = tree.getroot()
+        ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+
+        coordenadas = []
+
+        # Extraer las coordenadas de los Placemark
+        for placemark in root.findall('.//kml:Placemark', ns):
+            name = placemark.find('.//kml:name', ns)
+            coords = placemark.find('.//kml:coordinates', ns)
+            if coords is not None:
+                for coord in coords.text.strip().split():
+                    x, y, _ = coord.split(',')  # Descartar la altitud
+                    x, y = float(x), float(y)
+
+                    # Convertir las coordenadas según el formato solicitado
+                    if formato_salida == "UTM":
+                        coord_este, coord_norte, zona = convertir_a_utm(x, y)
+                        coordenadas.append((name.text if name is not None else "Sin nombre", zona, coord_este, coord_norte))
+                    elif formato_salida == "GMS":
+                        lat_gms, lon_gms = convertir_a_gms(x, y)
+                        coordenadas.append((name.text if name is not None else "Sin nombre", lat_gms, lon_gms))
+                    else:
+                        coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
+                        # Limpiar el directorio temporal
+    limpiar_directorio_temp()
 
     return coordenadas
 
-def convertir_a_magna_sirgas(x, y):
-    # Definir el sistema de coordenadas geográficas (WGS84)
-    wgs84 = Proj(proj='latlong', datum='WGS84')
+def convertir_a_utm(lon, lat):
+    utm_x, utm_y, zone_number, zone_letter = utm.from_latlon(lat, lon)
+    zona = f"{zone_number}{zone_letter}"
+    return utm_x, utm_y, zona
 
-     # Definir el sistema de coordenadas MAGNA-SIRGAS / Colombia West zone (EPSG:3116)
-    mag_sirg = Proj(init='epsg:3115')
+def convertir_a_gms(lon, lat):
+    def decimal_a_gms(grado_decimal):
+        grados = int(grado_decimal)
+        minutos = int((grado_decimal - grados) * 60)
+        segundos = (grado_decimal - grados - minutos / 60) * 3600
+        return f"{grados}° {minutos}' {segundos:.2f}\""
 
-    # Convertir las coordenadas
-    x_magna, y_magna = transform(wgs84, mag_sirg, x, y)
+    return decimal_a_gms(lat), decimal_a_gms(lon)
 
-    return x_magna, y_magna
+def guardar_coordenadas_en_excel(coordenadas, output, formato_salida):
+    workbook = Workbook()
+    hoja = workbook.active
+    hoja.title = "Coordenadas"
 
-def crear_bloques_en_autocad(coordenadas,bloque):
-    try:
-        acad = Autocad(create_if_not_exists=True)
-        for coord in coordenadas:
-            nombre, x, y = coord
-            x_magna, y_magna = convertir_a_magna_sirgas(float(x), float(y))
-            p1 = APoint(x_magna, y_magna)
-            acad.model.InsertBlock(p1, bloque, 1, 1, 1, 0)
-            # Insertar el texto como MText
-            longitud_mtext = 100  # Ancho del cuadro de MText
-            acad.model.AddMText(p1 + APoint(0, 0.5), longitud_mtext, nombre)  # Ajusta la posición del MText y el ancho del cuadro
-            
-        print("Bloques insertados correctamente.")
-    except Exception as e:
-        print(f"Error al insertar bloques: {e}")
+    if formato_salida == "UTM":
+        hoja.append(["Nombre", "Zona", "Coordenada Este", "Coordenada Norte"])
+        for name, zona, este, norte in coordenadas:
+            hoja.append([name, zona, este, norte])
+    else:
+        hoja.append(["Nombre", "Latitud", "Longitud"])
+        for name, lat, lon in coordenadas:
+            hoja.append([name, lat, lon])
 
-def main():
-    archivo_excel = input("Ingresa la ruta completa del archivo de coordenadas: ") # Cambia esto por la ruta a tu archivo Excel
-    bloque = input("Ingresa el nombre del bloque ") 
-    coordenadas = leer_coordenadas_excel(archivo_excel)
-    crear_bloques_en_autocad(coordenadas,bloque)
+    workbook.save(output)
 
+# Ejecutar la aplicación
 if __name__ == "__main__":
     main()

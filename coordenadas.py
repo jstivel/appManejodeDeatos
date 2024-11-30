@@ -7,8 +7,11 @@ import streamlit as st
 from io import BytesIO
 import tempfile
 import shutil
+<<<<<<< HEAD
 from geopy.distance import geodesic
 import csv
+=======
+>>>>>>> 13d57c435a482c755ad056cd97b51a9d0f170f20
 
 def limpiar_directorio_temp():
     temp_dir = "temp_kmz"
@@ -40,6 +43,7 @@ def main():
             try:
                 # Extraer coordenadas del archivo KMZ
                 coordenadas = extraer_coordenadas_de_kmz(kmz_file, formato_salida)
+<<<<<<< HEAD
                                 
                 # Crear archivo de salida en formato Excel               
                 with BytesIO() as output:
@@ -67,6 +71,21 @@ def main():
                             file_name=f"coordenadas_{kmz_file.name}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
+=======
+
+                # Crear archivo de salida en formato Excel
+                with BytesIO() as output:
+                    guardar_coordenadas_en_excel(coordenadas, output, formato_salida)
+                    output.seek(0)
+
+                    # Descargar archivo generado
+                    st.download_button(
+                        label="Descargar archivo de coordenadas",
+                        data=output,
+                        file_name=f"coordenadas_{kmz_file.name}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+>>>>>>> 13d57c435a482c755ad056cd97b51a9d0f170f20
                     st.success("Archivo generado y listo para descargar.")
             except Exception as e:
                 st.error(f"Error al procesar el archivo: {e}")
@@ -103,8 +122,11 @@ def extraer_coordenadas_de_kmz(kmz_file, formato_salida):
                     elif formato_salida == "GMS":
                         lat_gms, lon_gms = convertir_a_gms(x, y)
                         coordenadas.append((name.text if name is not None else "Sin nombre", lat_gms, lon_gms))
+<<<<<<< HEAD
                     elif formato_salida == "Extraer Distancias":
                         coordenadas.append((name.text if name is not None else "Sin nombre", (y, x)))
+=======
+>>>>>>> 13d57c435a482c755ad056cd97b51a9d0f170f20
                     else:
                         coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
                         # Limpiar el directorio temporal
@@ -142,6 +164,7 @@ def guardar_coordenadas_en_excel(coordenadas, output, formato_salida):
             hoja.append([name, lat, lon])
 
     workbook.save(output)
+<<<<<<< HEAD
 # Función para guardar las distancias en un archivo CSV
 def save_distance_excel(distances, output):
     # Crear un libro de Excel
@@ -173,6 +196,8 @@ def calculate_distances(coordenadas):
     return distances
 
 
+=======
+>>>>>>> 13d57c435a482c755ad056cd97b51a9d0f170f20
 
 # Ejecutar la aplicación
 if __name__ == "__main__":
