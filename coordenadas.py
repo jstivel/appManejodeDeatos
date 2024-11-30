@@ -9,6 +9,8 @@ import tempfile
 import shutil
 from geopy.distance import geodesic
 import csv
+import pandas as pd
+
 
 def limpiar_directorio_temp():
     temp_dir = "temp_kmz"
@@ -40,12 +42,16 @@ def main():
             try:
                 # Extraer coordenadas del archivo KMZ
                 coordenadas = extraer_coordenadas_de_kmz(kmz_file, formato_salida)
+
+                # Guardar coordenadas en el estado de la sesión
+                st.session_state.coordenadas = coordenadas
                                 
                 # Crear archivo de salida en formato Excel               
                 with BytesIO() as output:
                     # Comprobar si seleccionamos extraer distancias
                     if formato_salida =="Extraer Distancias":
                         distances = calculate_distances(coordenadas)
+                        st.session_state.coordenadas = distances
                         save_distance_excel(distances, output)
                         output.seek(0)
 
@@ -56,6 +62,7 @@ def main():
                             file_name=f"distancias_{kmz_file.name}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
+                       
                     else:
                         guardar_coordenadas_en_excel(coordenadas, output, formato_salida)
                         output.seek(0)
@@ -67,9 +74,31 @@ def main():
                             file_name=f"coordenadas_{kmz_file.name}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
+                        
                     st.success("Archivo generado y listo para descargar.")
+                    
+
+                    
+
             except Exception as e:
                 st.error(f"Error al procesar el archivo: {e}")
+    # Agregar el botón para ver en el navegador
+    if "coordenadas" in st.session_state:
+        if st.button("Ver en navegador") and "coordenadas" in st.session_state :
+            mostrar_coordenadas_tabla(st.session_state.coordenadas, formato_salida)            
+
+# Función para mostrar las coordenadas en una tabla en el navegador
+def mostrar_coordenadas_tabla(coordenadas, formato_salida):
+    # Crear un DataFrame de pandas con los datos de las coordenadas
+    if formato_salida == "UTM":
+        df = pd.DataFrame(coordenadas, columns=["Nombre", "Zona", "Coordenada Este", "Coordenada Norte"])
+    elif formato_salida =="Extraer Distancias":
+        df = pd.DataFrame(coordenadas, columns=["Punto 1", "Punto 2", "Distancia (m)"])
+    else:
+        df = pd.DataFrame(coordenadas, columns=["Nombre", "Latitud", "Longitud"])
+    
+    # Mostrar la tabla en el navegador
+    st.dataframe(df)
 
 def extraer_coordenadas_de_kmz(kmz_file, formato_salida):
     # Usar un directorio temporal para descomprimir el KMZ
