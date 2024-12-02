@@ -2,7 +2,6 @@ import streamlit as st
 from io import BytesIO
 from coordenadas import main
 import coordenadas
-import kmz_to_cad
 
 def mostrar_pagina_principal():
     st.title("Menú Principal")
@@ -10,9 +9,7 @@ def mostrar_pagina_principal():
     # Crear botones para navegar entre scripts
     if st.button("Ejecutar Script de Extracción de Coordenadas"):
         st.session_state.pagina_actual = "coordenadas"
-    elif st.button("Ejecutar Script para generar DXF"):
-        st.session_state.pagina_actual = "dxf"
-      
+        # Aquí llamamos la función que ejecuta el código de extracción
         
 
 # Inicializar el estado de la página si no existe
@@ -24,5 +21,3 @@ if st.session_state.pagina_actual == "principal":
     mostrar_pagina_principal()
 elif st.session_state.pagina_actual == "coordenadas":
     coordenadas.main()  # Ejecutamos solo la función
-elif st.session_state.pagina_actual == "dxf":
-    kmz_to_cad.main()  # Ejecutamos solo la función

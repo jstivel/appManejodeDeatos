@@ -131,10 +131,12 @@ def extraer_coordenadas_de_kmz(kmz_file, formato_salida):
                         coordenadas.append((name.text if name is not None else "Sin nombre", lat_gms, lon_gms))
                     elif formato_salida == "Extraer Distancias":
                         coordenadas.append((name.text if name is not None else "Sin nombre", (y, x)))
+                    elif formato_salida == "Decimal":
+                        coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
                     else:
                         coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
                         # Limpiar el directorio temporal
-    limpiar_directorio_temp()
+    #limpiar_directorio_temp()
 
     return coordenadas
 
