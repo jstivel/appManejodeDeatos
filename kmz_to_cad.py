@@ -5,6 +5,7 @@ import requests
 import tempfile
 from io import BytesIO
 import streamlit as st
+import math
 from pyproj import Proj, transform
 from coordenadas import extraer_coordenadas_de_kmz
 
@@ -53,27 +54,53 @@ def get_osm_data(lat_min, lat_max, lon_min, lon_max):
     
 def convert_osm_to_dxf(msp, osm_data,formato_salida):
     for element in osm_data['elements']:
-        if element['type'] == 'way':
-            # Obtener los IDs de los nodos en el 'way'            
+        if element['type'] == 'way':            
+            # Obtener las coordenadas 'way'            
             geometry = element.get('geometry', [])
-            
+            #obtener nombre de las calles     
+            streetName = element["tags"].get("name", None)
+            # Calcula lat min y max del way
+            minlat = min(point['lat'] for point in geometry)
+            minlon = min(point['lon'] for point in geometry)
+            maxlat = max(point['lat'] for point in geometry)
+            maxlon = max(point['lon'] for point in geometry)
+            if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
+                # Cálculo del punto medio
+                x1_magna, y1_magna = convertir_a_magna_sirgas(float(minlon), float(minlat))
+                x2_magna, y2_magna = convertir_a_magna_sirgas(float(maxlon), float(maxlat))
+                mid_x_magna = (x1_magna + x2_magna) / 2
+                mid_y_magna = (y1_magna + y2_magna) / 2
+                # Cálculo del ángulo (en grados)
+                angle_magna = math.degrees(math.atan2(y2_magna - y1_magna, x2_magna - x1_magna))   
+                if streetName:
+                    msp.add_text(
+                    streetName,
+                    dxfattribs={
+                    "height": 2,
+                    "rotation": angle_magna,  # Rotación del texto
+                    "insert":(mid_x_magna, mid_y_magna)
+                    })
+            # Extraer las coordenadas (lat, lon) de la geometría
+            coords = [(point['lon'], point['lat']) for point in geometry]
             if geometry:
-                # Extraer las coordenadas (lat, lon) de la geometría
-                coords = [(point['lon'], point['lat']) for point in geometry]
                 
                 # Convertir a coordenadas de tipo DXF (en este caso, lat -> y, lon -> x)
                 for i in range(len(coords)-1):
                     x1, y1 = coords[i]
-                    x2, y2 = coords[i+1]
+                    x2, y2 = coords[i+1]                    
+
                     if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
                         x1_magna, y1_magna = convertir_a_magna_sirgas(float(x1), float(y1))
                         x2_magna, y2_magna = convertir_a_magna_sirgas(float(x2), float(y2))
+                        
+                     
                         # Dibujar línea en el DXF
-                        msp.add_line((x1_magna, y1_magna), (x2_magna, y2_magna))    
+                        msp.add_line((x1_magna, y1_magna), (x2_magna, y2_magna)) 
+                        # Insertar nombre de calle                        
+                        
                     else:
                         # Dibujar línea en el DXF
-                        msp.add_line((x1, y1), (x2, y2))                   
-                
+                        msp.add_line((x1, y1), (x2, y2))  
         elif element['type'] == 'relation':
             # Puedes manejar relaciones (polígonos, áreas, etc.) aquí si es necesario
             pass
@@ -177,7 +204,7 @@ def main():
                     st.download_button(
                         label="Descargar archivo DXF",
                         data=output,
-                        file_name=f"coordenadas_{template_dwg.name}.dxf",  # Nombre del archivo descargado
+                        file_name=f"coordenadas_{template_dwg.name}",  # Nombre del archivo descargado
                         mime="application/dxf"  # Tipo MIME del archivo DXF
                     )    
                     
@@ -187,7 +214,6 @@ def main():
 # Botón para volver al menú principal
     if st.button("Volver al Menú Principal"):
         st.session_state.pagina_actual = "principal"
-
 
 if __name__ == "__main__":
     main()
