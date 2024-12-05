@@ -125,27 +125,53 @@ def main():
             
             try:
                 coordenadas = extraer_coordenadas_de_kmz(kmz_file,formato_salida)
+                 # Extraer las coordenadas (lat, lon) de la geometría
+                coords = [(point[2], point[1]) for point in coordenadas]
                 #dxf_output = kmz_to_dwg(kmz_file, template_dwg, block_name, add_cartography,formato_salida)
                 with BytesIO() as output:
                 # Crear un directorio temporal para manejar el archivo DXF
                     with tempfile.TemporaryDirectory() as temp_dir:
                         dxf_path = os.path.join(temp_dir, template_dwg.name)
-                        print(dxf_path)
+                        
                         # Escribimos el contenido del archivo subido en el archivo temporal
                         with open(dxf_path, 'wb') as temp_dxf:
                             temp_dxf.write(template_dwg.getvalue())
-                        print(dxf_path)
-                        # Guardamos el archivo DXF en el directorio temporal
-                        # Comprobamos si el archivo DXF existe en el directorio temporal
-                        if os.path.exists(dxf_path):
-                            # Ahora puedes procesar el archivo DXF
-                            doc = ezdxf.readfile(dxf_path)  # Procesa el archivo DXF
                         
-                            
-                        
+                       
                         # Leer el archivo DXF basado en la plantilla
                         doc = ezdxf.readfile(dxf_path)
                         msp = doc.modelspace()
+                        
+                        # Convertir a coordenadas de tipo DXF (en este caso, lat -> y, lon -> x)
+                        if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
+                            coords_sirgas=[]
+                            for coord in coords:
+                                x,y=coord                                
+                                sirgas=convertir_a_magna_sirgas(float(x), float(y))
+                                coords_sirgas.append(sirgas) 
+                            print(coords_sirgas[0])                                     
+                            msp.add_lwpolyline(coords_sirgas)  
+                        else:
+                            msp.add_lwpolyline(coords)  
+
+                        """ for i in range(len(coords)-1):
+                            x1, y1 = coords[i]
+                            x2, y2 = coords[i+1]  
+                            print(x1,x2)    
+                            print(y1,y2)                  
+
+                            if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
+                                x1_magna, y1_magna = convertir_a_magna_sirgas(float(x1), float(y1))
+                                x2_magna, y2_magna = convertir_a_magna_sirgas(float(x2), float(y2))
+                                
+                            
+                                # Dibujar línea en el DXF
+                                msp.add_line((x1_magna, y1_magna), (x2_magna, y2_magna)) 
+                                # Insertar nombre de calle                        
+                                
+                            else:
+                                # Dibujar línea en el DXF
+                                msp.add_line((x1, y1), (x2, y2))   """
 
                         # Crear listas para almacenar las coordenadas de los puntos
                         latitudes = []
