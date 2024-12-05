@@ -7,7 +7,7 @@ from io import BytesIO
 import streamlit as st
 import math
 from pyproj import Proj, transform
-from coordenadas import extraer_coordenadas_de_kmz
+from coordenadas import extraer_coordenadas_de_kmz,calculate_distances
 
 def convertir_a_magna_sirgas(x, y):
     # Definir el sistema de coordenadas geográficas (WGS84)
@@ -124,7 +124,11 @@ def main():
         else:
             
             try:
+                
                 coordenadas = extraer_coordenadas_de_kmz(kmz_file,formato_salida)
+                distancias = calculate_distances(coordenadas)
+                solo_distancias = [(distancia[2]) for distancia in distancias]
+                print(solo_distancias[0])
                  # Extraer las coordenadas (lat, lon) de la geometría
                 coords = [(point[2], point[1]) for point in coordenadas]
                 #dxf_output = kmz_to_dwg(kmz_file, template_dwg, block_name, add_cartography,formato_salida)
@@ -145,33 +149,31 @@ def main():
                         # Convertir a coordenadas de tipo DXF (en este caso, lat -> y, lon -> x)
                         if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
                             coords_sirgas=[]
+                            
+                           
                             for coord in coords:
                                 x,y=coord                                
                                 sirgas=convertir_a_magna_sirgas(float(x), float(y))
                                 coords_sirgas.append(sirgas) 
-                            print(coords_sirgas[0])                                     
+                            #calcular punto medio e inserción de distancias
+                            for i in range(len(coords_sirgas)-1):
+                                x1,y1=coords_sirgas[i]     
+                                x2,y2=coords_sirgas[i+1] 
+                                mid_x_magna = (x1 + x2) / 2
+                                mid_y_magna = (y1 + y2) / 2
+                                # Cálculo del ángulo (en grados)
+                                angle_magna = math.degrees(math.atan2(y2 - y1, x2 - x1))
+                                msp.add_text(
+                                str(solo_distancias[i]) + ".0",
+                                dxfattribs={
+                                "height": 2,
+                                "rotation": angle_magna,  # Rotación del texto
+                                "insert":(mid_x_magna, mid_y_magna)
+                                })   
+
                             msp.add_lwpolyline(coords_sirgas)  
                         else:
                             msp.add_lwpolyline(coords)  
-
-                        """ for i in range(len(coords)-1):
-                            x1, y1 = coords[i]
-                            x2, y2 = coords[i+1]  
-                            print(x1,x2)    
-                            print(y1,y2)                  
-
-                            if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
-                                x1_magna, y1_magna = convertir_a_magna_sirgas(float(x1), float(y1))
-                                x2_magna, y2_magna = convertir_a_magna_sirgas(float(x2), float(y2))
-                                
-                            
-                                # Dibujar línea en el DXF
-                                msp.add_line((x1_magna, y1_magna), (x2_magna, y2_magna)) 
-                                # Insertar nombre de calle                        
-                                
-                            else:
-                                # Dibujar línea en el DXF
-                                msp.add_line((x1, y1), (x2, y2))   """
 
                         # Crear listas para almacenar las coordenadas de los puntos
                         latitudes = []
@@ -192,7 +194,7 @@ def main():
                                 msp.add_blockref(block_name, (x_magna,y_magna))
                                 msp.add_text(
                                     nombre,
-                                    dxfattribs={"insert": (x_magna+ 1, y_magna), "height": 2},
+                                    dxfattribs={"insert": (x_magna-8, y_magna+2), "height": 2},
                                 )
                             else:    
                                      

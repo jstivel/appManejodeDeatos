@@ -10,6 +10,7 @@ import shutil
 from geopy.distance import geodesic
 import csv
 import pandas as pd
+import math
 
 
 def limpiar_directorio_temp():
@@ -130,7 +131,7 @@ def extraer_coordenadas_de_kmz(kmz_file, formato_salida):
                         lat_gms, lon_gms = convertir_a_gms(x, y)
                         coordenadas.append((name.text if name is not None else "Sin nombre", lat_gms, lon_gms))
                     elif formato_salida == "Extraer Distancias":
-                        coordenadas.append((name.text if name is not None else "Sin nombre", (y, x)))
+                        coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
                     elif formato_salida == "Decimal":
                         coordenadas.append((name.text if name is not None else "Sin nombre", y, x))
                     else:
@@ -191,13 +192,20 @@ def save_distance_excel(distances, output):
 def calculate_distances(coordenadas):
     distances = []
     for i in range(len(coordenadas) - 1):
-        point1_name, point1_coords = coordenadas[i]
-        point2_name, point2_coords = coordenadas[i + 1]
-        # Extraer lat/lon
-        point1_latlon = (point1_coords[0], point1_coords[1])
-        point2_latlon = (point2_coords[0], point2_coords[1])
+        # Desempaquetar las coordenadas en tres elementos: nombre, lat, lon
+        point1_name, point1_lat, point1_lon = coordenadas[i]
+        point2_name, point2_lat, point2_lon = coordenadas[i + 1]
+
+        # Crear tuplas de latitud y longitud para calcular la distancia
+        point1_latlon = (point1_lat, point1_lon)
+        point2_latlon = (point2_lat, point2_lon)
+        
+        # Calcular la distancia entre los dos puntos
         distance = geodesic(point1_latlon, point2_latlon).meters
-        distances.append((point1_name, point2_name, distance))
+        
+        # Agregar la distancia calculada y los puntos a la lista de distancias
+        distances.append((point1_name, point2_name, math.ceil(distance)))
+    
     return distances
 
 
