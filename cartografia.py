@@ -48,7 +48,7 @@ def main():
     gdf_manzanas.to_file("manzanas_offset.gpkg", driver="GPKG")
 
     # 4. Convertir a DXF con ogr2ogr
-    !ogr2ogr -f DXF manzanas_offset.dxf manzanas_offset.gpkg
+    #!ogr2ogr -f DXF manzanas_offset.dxf manzanas_offset.gpkg
 
     print("Cartografía de manzanas con offset guardada en manzanas_offset.dxf")
 
