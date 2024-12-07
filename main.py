@@ -3,6 +3,7 @@ from io import BytesIO
 from coordenadas import main
 import coordenadas
 import kmz_to_cad
+import cartografia
 
 def mostrar_pagina_principal():
     st.title("Menú Principal")
@@ -10,6 +11,8 @@ def mostrar_pagina_principal():
     # Crear botones para navegar entre scripts
     if st.button("Ejecutar Script de Extracción de Coordenadas"):
         st.session_state.pagina_actual = "coordenadas"
+    if st.button("Generar cartografia cali"):
+        cartografia.main()
     elif st.button("Ejecutar Script para generar DXF"):
         st.session_state.pagina_actual = "dxf"
       

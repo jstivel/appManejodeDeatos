@@ -8,6 +8,11 @@ import streamlit as st
 import math
 from pyproj import Proj, transform
 from coordenadas import extraer_coordenadas_de_kmz,calculate_distances
+import logging  
+import config_log
+import osmnx as ox
+import networkx as nx
+
 
 def convertir_a_magna_sirgas(x, y):
     # Definir el sistema de coordenadas geográficas (WGS84)
@@ -15,6 +20,7 @@ def convertir_a_magna_sirgas(x, y):
 
      # Definir el sistema de coordenadas MAGNA-SIRGAS / Colombia West zone (EPSG:3116)
     mag_sirg = Proj(init='epsg:3115')
+    
 
     # Convertir las coordenadas
     x_magna, y_magna = transform(wgs84, mag_sirg, x, y)
@@ -23,36 +29,36 @@ def convertir_a_magna_sirgas(x, y):
 
 def get_osm_data(lat_min, lat_max, lon_min, lon_max):
    
-    query = f"""
-    [out:json];
+    #query = f"""
+    """ [out:json];
     (
       node({lat_min},{lon_min},{lat_max},{lon_max});
       way({lat_min},{lon_min},{lat_max},{lon_max});
       relation({lat_min},{lon_min},{lat_max},{lon_max});
     );
-    out body;
-    """
+    out body; """
+    #"""
     url = "https://overpass-api.de/api/interpreter"
-    response = requests.get(url, params={'data': query})
+    bbox=(lon_min,lat_min,lon_max,lat_max)
+    response = ox.graph.graph_from_bbox(bbox,network_type='all')
+    #response = requests.get(url, params={'data': query})
 
+    logging.info("primer consulta OSM"+str(response))
+    way_ids = [data['osmid'][0] if isinstance(data['osmid'], list) else data['osmid'] for u, v, data in response.edges(data=True)]
+
+    
+    logging.info("primer consulta OSM"+str(way_ids))
+
+    query_way = "[out:json];" + "".join([f"way({way_id});out geom;" for way_id in way_ids])
+    logging.info("segunda consulta query_way"+str(query_way))
+    response = requests.get(url, params={'data': query_way})
+    logging.info("respuesta ways"+str(response.json()))
+    return response.json()
     # Guardar la consulta y respuesta para análisis    
     
-    if response.status_code == 200:       
-        
-        # Extraer todos los IDs de "type": "way"
-        way_ids = [element["id"] for element in response.json()["elements"] if element["type"] == "way"]
-        
-        # Crear la consulta unificada para todos los way_ids
-        query_way = "[out:json];" + "".join([f"way({way_id});out geom;" for way_id in way_ids])
-        
-        response = requests.get(url, params={'data': query_way})
-        
-        return response.json()
-    else:
-        
-        return None
     
 def convert_osm_to_dxf(msp, osm_data,formato_salida):
+    print(osm_data)
     for element in osm_data['elements']:
         if element['type'] == 'way':            
             # Obtener las coordenadas 'way'            
@@ -64,22 +70,25 @@ def convert_osm_to_dxf(msp, osm_data,formato_salida):
             minlon = min(point['lon'] for point in geometry)
             maxlat = max(point['lat'] for point in geometry)
             maxlon = max(point['lon'] for point in geometry)
-            if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
-                # Cálculo del punto medio
-                x1_magna, y1_magna = convertir_a_magna_sirgas(float(minlon), float(minlat))
-                x2_magna, y2_magna = convertir_a_magna_sirgas(float(maxlon), float(maxlat))
-                mid_x_magna = (x1_magna + x2_magna) / 2
-                mid_y_magna = (y1_magna + y2_magna) / 2
-                # Cálculo del ángulo (en grados)
-                angle_magna = math.degrees(math.atan2(y2_magna - y1_magna, x2_magna - x1_magna))   
-                if streetName:
-                    msp.add_text(
-                    streetName,
-                    dxfattribs={
-                    "height": 2,
-                    "rotation": angle_magna,  # Rotación del texto
-                    "insert":(mid_x_magna, mid_y_magna)
-                    })
+            try:
+                if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
+                    # Cálculo del punto medio
+                    x1_magna, y1_magna = convertir_a_magna_sirgas(float(minlon), float(minlat))
+                    x2_magna, y2_magna = convertir_a_magna_sirgas(float(maxlon), float(maxlat))
+                    mid_x_magna = (x1_magna + x2_magna) / 2
+                    mid_y_magna = (y1_magna + y2_magna) / 2
+                    # Cálculo del ángulo (en grados)
+                    angle_magna = math.degrees(math.atan2(y2_magna - y1_magna, x2_magna - x1_magna))   
+                    if streetName:
+                        msp.add_text(
+                        streetName,
+                        dxfattribs={
+                        "height": 2,
+                        "rotation": angle_magna,  # Rotación del texto
+                        "insert":(mid_x_magna, mid_y_magna)
+                        })
+            except Exception as e:
+                st.error(f"Error al procesar el archivo: {e}")
             # Extraer las coordenadas (lat, lon) de la geometría
             coords = [(point['lon'], point['lat']) for point in geometry]
             if geometry:
