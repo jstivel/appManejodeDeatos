@@ -88,3 +88,5 @@ def main():
     doc.saveas("manzanas_con_calles.dxf")
 
     print("Cartografía de manzanas con calles y direcciones guardada en manzanas_con_calles.dxf")
+if __name__ == "__main__":
+    main()
