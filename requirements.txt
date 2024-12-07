@@ -1,4 +1,5 @@
-﻿altair==5.5.0
+--upgrade pip
+altair==5.5.0
 altgraph==0.17.4
 anywidget==0.9.13
 asttokens==3.0.0
