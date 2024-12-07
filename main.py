@@ -11,7 +11,7 @@ def mostrar_pagina_principal():
     # Crear botones para navegar entre scripts
     if st.button("Ejecutar Script de Extracción de Coordenadas"):
         st.session_state.pagina_actual = "coordenadas"
-    if st.button("Generar cartografia cali"):
+    elif st.button("Generar cartografia cali"):
         st.session_state.pagina_actual = "cartografia"
         
     elif st.button("Ejecutar Script para generar DXF"):
