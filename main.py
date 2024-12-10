@@ -11,8 +11,6 @@ def mostrar_pagina_principal():
     # Crear botones para navegar entre scripts
     if st.button("Ejecutar Script de Extracción de Coordenadas"):
         st.session_state.pagina_actual = "coordenadas"
-    if st.button("Generar cartografia cali"):
-        st.session_state.pagina_actual = "cartografia"
         
     elif st.button("Ejecutar Script para generar DXF"):
         st.session_state.pagina_actual = "dxf"
@@ -30,5 +28,4 @@ elif st.session_state.pagina_actual == "coordenadas":
     coordenadas.main()  # Ejecutamos solo la función
 elif st.session_state.pagina_actual == "dxf":
     kmz_to_cad.main()  # Ejecutamos solo la función
-elif st.session_state.pagina_actual == "cartografia":
-    cartografia.main()
+

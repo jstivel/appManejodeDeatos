@@ -12,6 +12,8 @@ import logging
 import config_log
 import osmnx as ox
 import networkx as nx
+import cartografia
+from ezdxf.addons import Importer
 
 
 def convertir_a_magna_sirgas(x, y):
@@ -26,96 +28,6 @@ def convertir_a_magna_sirgas(x, y):
     x_magna, y_magna = transform(wgs84, mag_sirg, x, y)
 
     return x_magna, y_magna  
-
-def get_osm_data(lat_min, lat_max, lon_min, lon_max):
-   
-    #query = f"""
-    """ [out:json];
-    (
-      node({lat_min},{lon_min},{lat_max},{lon_max});
-      way({lat_min},{lon_min},{lat_max},{lon_max});
-      relation({lat_min},{lon_min},{lat_max},{lon_max});
-    );
-    out body; """
-    #"""
-    url = "https://overpass-api.de/api/interpreter"
-    bbox=(lon_min,lat_min,lon_max,lat_max)
-    response = ox.graph.graph_from_bbox(bbox,network_type='all')
-    #response = requests.get(url, params={'data': query})
-
-    logging.info("primer consulta OSM"+str(response))
-    way_ids = [data['osmid'][0] if isinstance(data['osmid'], list) else data['osmid'] for u, v, data in response.edges(data=True)]
-
-    
-    logging.info("primer consulta OSM"+str(way_ids))
-
-    query_way = "[out:json];" + "".join([f"way({way_id});out geom;" for way_id in way_ids])
-    logging.info("segunda consulta query_way"+str(query_way))
-    response = requests.get(url, params={'data': query_way})
-    logging.info("respuesta ways"+str(response.json()))
-    return response.json()
-    # Guardar la consulta y respuesta para análisis    
-    
-    
-def convert_osm_to_dxf(msp, osm_data,formato_salida):
-    print(osm_data)
-    for element in osm_data['elements']:
-        if element['type'] == 'way':            
-            # Obtener las coordenadas 'way'            
-            geometry = element.get('geometry', [])
-            #obtener nombre de las calles     
-            streetName = element["tags"].get("name", None)
-            # Calcula lat min y max del way
-            minlat = min(point['lat'] for point in geometry)
-            minlon = min(point['lon'] for point in geometry)
-            maxlat = max(point['lat'] for point in geometry)
-            maxlon = max(point['lon'] for point in geometry)
-            try:
-                if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
-                    # Cálculo del punto medio
-                    x1_magna, y1_magna = convertir_a_magna_sirgas(float(minlon), float(minlat))
-                    x2_magna, y2_magna = convertir_a_magna_sirgas(float(maxlon), float(maxlat))
-                    mid_x_magna = (x1_magna + x2_magna) / 2
-                    mid_y_magna = (y1_magna + y2_magna) / 2
-                    # Cálculo del ángulo (en grados)
-                    angle_magna = math.degrees(math.atan2(y2_magna - y1_magna, x2_magna - x1_magna))   
-                    if streetName:
-                        msp.add_text(
-                        streetName,
-                        dxfattribs={
-                        "height": 2,
-                        "rotation": angle_magna,  # Rotación del texto
-                        "insert":(mid_x_magna, mid_y_magna)
-                        })
-            except Exception as e:
-                st.error(f"Error al procesar el archivo: {e}")
-            # Extraer las coordenadas (lat, lon) de la geometría
-            coords = [(point['lon'], point['lat']) for point in geometry]
-            if geometry:
-                
-                # Convertir a coordenadas de tipo DXF (en este caso, lat -> y, lon -> x)
-                for i in range(len(coords)-1):
-                    x1, y1 = coords[i]
-                    x2, y2 = coords[i+1]                    
-
-                    if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
-                        x1_magna, y1_magna = convertir_a_magna_sirgas(float(x1), float(y1))
-                        x2_magna, y2_magna = convertir_a_magna_sirgas(float(x2), float(y2))
-                        
-                     
-                        # Dibujar línea en el DXF
-                        msp.add_line((x1_magna, y1_magna), (x2_magna, y2_magna)) 
-                        # Insertar nombre de calle                        
-                        
-                    else:
-                        # Dibujar línea en el DXF
-                        msp.add_line((x1, y1), (x2, y2))  
-        elif element['type'] == 'relation':
-            # Puedes manejar relaciones (polígonos, áreas, etc.) aquí si es necesario
-            pass
-
-    print("Geometría de OSM añadida al DXF")
-
 
 # Interfaz de Streamlit
 def main():
@@ -137,23 +49,59 @@ def main():
                 coordenadas = extraer_coordenadas_de_kmz(kmz_file,formato_salida)
                 distancias = calculate_distances(coordenadas)
                 solo_distancias = [(distancia[2]) for distancia in distancias]
-                print(solo_distancias[0])
+                
                  # Extraer las coordenadas (lat, lon) de la geometría
                 coords = [(point[2], point[1]) for point in coordenadas]
-                #dxf_output = kmz_to_dwg(kmz_file, template_dwg, block_name, add_cartography,formato_salida)
+                # Agregar base cartográfica si se seleccionó
+                # Crear listas para almacenar las coordenadas de los puntos
+                latitudes = []
+                longitudes = []
+                        
+                #coordenadas = extraer_coordenadas_de_kmz(kmz_file,formato_salida)
+                        
+                for cordenada in coordenadas:
+                    cord = cordenada 
+                    longitudes.append(cord[2])
+                    latitudes.append(cord[1])                                  
+                    
+                   
                 with BytesIO() as output:
                 # Crear un directorio temporal para manejar el archivo DXF
+                    
+                    
                     with tempfile.TemporaryDirectory() as temp_dir:
-                        dxf_path = os.path.join(temp_dir, template_dwg.name)
-                        
+                        dxf_path = os.path.join(temp_dir, template_dwg.name)                        
+                        final_dxf_path_carto = os.path.join(temp_dir, "manzanas_con_cll.dxf")  
+
                         # Escribimos el contenido del archivo subido en el archivo temporal
                         with open(dxf_path, 'wb') as temp_dxf:
-                            temp_dxf.write(template_dwg.getvalue())
+                            temp_dxf.write(template_dwg.getvalue())   
                         
-                       
-                        # Leer el archivo DXF basado en la plantilla
-                        doc = ezdxf.readfile(dxf_path)
-                        msp = doc.modelspace()
+                        if add_cartography:                            
+                            lat_min = min(latitudes) - 0.005
+                            lat_max = max(latitudes) + 0.005
+                            lon_min = min(longitudes) - 0.005
+                            lon_max = max(longitudes) + 0.005 
+                            cartografia.catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida)
+                            
+                            # Leer el archivo DXF basado en la plantilla
+                            doc_template = ezdxf.readfile(dxf_path)    
+                            doc_template.dxfversion = "AC1021"                    
+                            doc = ezdxf.readfile(final_dxf_path_carto)
+                            doc.dxfversion = "AC1021"                        
+                            msp = doc.modelspace()                                          
+                            block_names = [block.name for block in doc_template.blocks 
+                                        if not block.name.startswith("*") and 
+                                        block.name not in ('*Model_Space', '*Paper_Space')]
+                            importer = Importer(doc_template, doc)     
+                            importer.import_blocks(block_names)  
+                            importer.finalize()  
+                        else:
+                            doc = ezdxf.readfile(dxf_path)     
+                            msp = doc.modelspace()   
+
+                            
+                                        
                         
                         # Convertir a coordenadas de tipo DXF (en este caso, lat -> y, lon -> x)
                         if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
@@ -183,18 +131,10 @@ def main():
                             msp.add_lwpolyline(coords_sirgas)  
                         else:
                             msp.add_lwpolyline(coords)  
-
-                        # Crear listas para almacenar las coordenadas de los puntos
-                        latitudes = []
-                        longitudes = []
-                        
-                        #coordenadas = extraer_coordenadas_de_kmz(kmz_file,formato_salida)
                         
                         for cordenada in coordenadas:
                             coords = cordenada 
-                            longitudes.append(coords[2])
-                            latitudes.append(coords[1])    
-                            
+                                                        
                             if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
                                 nombre, y, x = coords
                                 x_magna, y_magna = convertir_a_magna_sirgas(float(x), float(y))                               
@@ -215,14 +155,7 @@ def main():
                                 )
                             
                             
-                        # Agregar base cartográfica si se seleccionó
-                        if add_cartography:
-                            lat_min = min(latitudes) - 0.001
-                            lat_max = max(latitudes) + 0.001
-                            lon_min = min(longitudes) - 0.002
-                            lon_max = max(longitudes) + 0.002
-                            osm_data = get_osm_data(lat_min, lat_max, lon_min, lon_max)
-                            convert_osm_to_dxf(msp, osm_data,formato_salida)
+                        
                     
                     # Guardar el archivo DXF procesado en un nuevo archivo temporal
                     with tempfile.TemporaryDirectory() as temp_dir2:
@@ -247,7 +180,8 @@ def main():
                     
                 
             except Exception as e:
-                st.error(f"Error al procesar el archivo: {e}")
+                print(f"Error al procesar el archivo: {e}")
+                st.error(f"Error al procesar el archivo")
 # Botón para volver al menú principal
     if st.button("Volver al Menú Principal"):
         st.session_state.pagina_actual = "principal"
