@@ -32,12 +32,55 @@ def convertir_a_magna_sirgas(x, y):
 # Interfaz de Streamlit
 def main():
     st.title("Convertir KMZ a DXF")
+    # Dividir la pantalla en dos columnas
+    col1, col2 = st.columns(2)
+    section1 = col1.empty()
+    section2 = col2.empty()
+    section3 = st.empty()
+    
+    with section1.container():     
+        with col1:
+            kmz_file = st.file_uploader("Cargar archivo KMZ", type=["kmz"])
+    with section2.container(): 
+        template_dwg = st.file_uploader("Cargar plantilla DXF", type=["dxf"])
 
-    kmz_file = st.file_uploader("Cargar archivo KMZ", type=["kmz"])
-    template_dwg = st.file_uploader("Cargar plantilla DWG", type=["dxf"])
-    block_name = st.text_input("Nombre del bloque a insertar", "DefaultBlock")
     formato_salida = st.selectbox("Seleccionar formato de cordenadas", ["Decimal","MAGNA-SIRGAS / Colombia West zone EPSG:3115"])
     add_cartography = st.checkbox("Agregar base cartográfica", value=False)
+
+     
+    if template_dwg:
+        try:
+            # Crear un archivo temporal para manejar el archivo DXF
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".dxf") as temp_dxf:
+                temp_dxf.write(template_dwg.read())
+                temp_dxf_path = temp_dxf.name
+            # Leer el archivo DXF desde el archivo temporal con ezdxf
+            doc_template = ezdxf.readfile(temp_dxf_path)
+            # Obtener las capas
+            layers = [layer.dxf.name for layer in doc_template.layers]
+            # Obtener los bloques
+            blocks = [block.name for block in doc_template.blocks 
+                                        if not block.name.startswith("*") and 
+                                        block.name not in ('*Model_Space', '*Paper_Space')]
+            # Mostrar las capas y bloques en el navegador
+            
+            with section3.container():   
+                if blocks:
+                    block_name = st.selectbox("Seleccione el bloque que desea insertar",blocks )
+                 
+                    #list(map(lambda block_name: st.write(f"• {block_name}"), blocks))
+                else:
+                    st.write("No se encontraron bloques en el archivo DXF.")
+                if layers:
+                    layer_name = st.selectbox("Seleccione la capa en la que desea insertar el bloque",layers )
+                   
+                else:
+                    st.write("No se encontraron capas en el archivo DXF.")
+                # Eliminar el archivo temporal
+                os.remove(temp_dxf_path)
+        except Exception as e:
+            st.error(f"Error al procesar el archivo DXF: {e}")
+
 
     if st.button("Generar archivo DXF"):
         if not kmz_file or not template_dwg:
@@ -67,8 +110,6 @@ def main():
                    
                 with BytesIO() as output:
                 # Crear un directorio temporal para manejar el archivo DXF
-                    
-                    
                     with tempfile.TemporaryDirectory() as temp_dir:
                         dxf_path = os.path.join(temp_dir, template_dwg.name)                        
                         final_dxf_path_carto = os.path.join(temp_dir, "manzanas_con_cll.dxf")  
@@ -76,7 +117,7 @@ def main():
                         # Escribimos el contenido del archivo subido en el archivo temporal
                         with open(dxf_path, 'wb') as temp_dxf:
                             temp_dxf.write(template_dwg.getvalue())   
-                        
+
                         if add_cartography:                            
                             lat_min = min(latitudes) - 0.005
                             lat_max = max(latitudes) + 0.005
@@ -84,9 +125,9 @@ def main():
                             lon_max = max(longitudes) + 0.005 
                             cartografia.catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida)
                             
-                            # Leer el archivo DXF basado en la plantilla
-                            doc_template = ezdxf.readfile(dxf_path)    
-                            doc_template.dxfversion = "AC1021"                    
+                            # Leer el archivo DXF basado en la plantilla 
+                            doc_template = ezdxf.readfile(dxf_path)   
+                            doc_template.dxfversion = "AC1021"                                               
                             doc = ezdxf.readfile(final_dxf_path_carto)
                             doc.dxfversion = "AC1021"                        
                             msp = doc.modelspace()                                          
@@ -99,15 +140,14 @@ def main():
                         else:
                             doc = ezdxf.readfile(dxf_path)     
                             msp = doc.modelspace()   
-
-                            
-                                        
                         
+                        # Verificar si la capa ya existe; si no, crearla con el color especificado
+                        if layer_name not in doc.layers:
+                            doc.layers.new(name=layer_name, dxfattribs={"color": 5})
+
                         # Convertir a coordenadas de tipo DXF (en este caso, lat -> y, lon -> x)
                         if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
                             coords_sirgas=[]
-                            
-                           
                             for coord in coords:
                                 x,y=coord                                
                                 sirgas=convertir_a_magna_sirgas(float(x), float(y))
@@ -125,7 +165,7 @@ def main():
                                 dxfattribs={
                                 "height": 2,
                                 "rotation": angle_magna,  # Rotación del texto
-                                "insert":(mid_x_magna, mid_y_magna)
+                                "insert":(mid_x_magna, mid_y_magna),"layer":"Distance"
                                 })   
 
                             msp.add_lwpolyline(coords_sirgas)  
@@ -137,21 +177,21 @@ def main():
                                                         
                             if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
                                 nombre, y, x = coords
-                                x_magna, y_magna = convertir_a_magna_sirgas(float(x), float(y))                               
+                                x_magna, y_magna = convertir_a_magna_sirgas(float(x), float(y)) 
+                                                             
                                 # Insertar bloque y texto
-                                
-                                msp.add_blockref(block_name, (x_magna,y_magna))
+                                msp.add_blockref(block_name, (x_magna,y_magna),dxfattribs={"layer": layer_name})
                                 msp.add_text(
                                     nombre,
-                                    dxfattribs={"insert": (x_magna-8, y_magna+2), "height": 2},
+                                    dxfattribs={"insert": (x_magna-8, y_magna+2), "height": 2,"layer":"Text"},
                                 )
                             else:    
                                      
                                 # Insertar bloque y texto
-                                msp.add_blockref(block_name, (coords[2], coords[1]))
+                                msp.add_blockref(block_name, (coords[2], coords[1]),dxfattribs={"layer": layer_name})
                                 msp.add_text(
                                     coords[0],
-                                    dxfattribs={"insert": (coords[2]+ 0.0001, coords[1]), "height": 0.00004},
+                                    dxfattribs={"insert": (coords[2]+ 0.0001, coords[1]), "height": 0.00004,"layer":"Text"},
                                 )
                             
                             

@@ -31,7 +31,7 @@ def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida
             nodes, edges = ox.graph_to_gdfs(G)
             edges = edges[edges.geometry.notnull() & edges.geometry.is_valid]
             edges = edges.rename(columns={'u': 'from_node'})
-            edges['geometry'] = edges['geometry'].simplify(tolerance=0.0001)
+            edges['geometry'] = edges['geometry'].simplify(tolerance=0.000007)
 
             # Crear polígonos de manzanas usando offset
             manzanas = []
@@ -93,7 +93,7 @@ def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida
                                 dxfattribs={
                                 "height": 2,
                                 "rotation": angle,  # Rotación del texto
-                                "insert":(mid_x_magna, mid_y_magna)
+                                "insert":(mid_x_magna, mid_y_magna),"layer":"Calles"
                                 })  
                             processed_edges.add(osmid)
                             
@@ -102,7 +102,7 @@ def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida
                             x2, y2 = line.coords[1]
                             angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
                             mid_point = line.interpolate(0.5, normalized=True)
-                            msp.add_text(row['name'], dxfattribs={'height': 0.00002, 'rotation': angle}).set_placement(
+                            msp.add_text(row['name'], dxfattribs={'height': 0.00002, 'rotation': angle,"layer":"Calles"}).set_placement(
                                 (mid_point.x, mid_point.y), align=TextEntityAlignment.MIDDLE_CENTER)
                             processed_edges.add(osmid)
 
