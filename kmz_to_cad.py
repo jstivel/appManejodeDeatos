@@ -144,6 +144,7 @@ def trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_
             if add_cartography:                            
                 doc,msp,final_dxf_path_carto = add_mapping(longitudes,latitudes,output_format,dxf_path)
             else:  
+                doc = ezdxf.readfile(dxf_path)
                 msp = doc.modelspace()
             if layer_name not in doc.layers:
                 doc.layers.new(name=layer_name, dxfattribs={"color": 5})
