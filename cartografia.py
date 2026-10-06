@@ -9,8 +9,34 @@ import math
 import pyogrio
 import tempfile
 import os
+import time
 import traceback
 import kmz_to_cad
+
+
+def _descargar_grafo_bbox(bbox):
+    endpoints = [
+        "https://overpass-api.de/api",
+        "https://lz4.overpass-api.de/api",
+        "https://overpass.kumi.systems/api",
+        "https://maps.mail.ru/osm/tools/overpass/api",
+    ]
+    ox.settings.http_user_agent = "AppManejoDeDatos/1.0 (contact: stivel275@gmail.com)"
+    ox.settings.requests_timeout = 60
+    ultimo_error = None
+    for endpoint in endpoints:
+        try:
+            ox.settings.overpass_url = endpoint
+            G = ox.graph.graph_from_bbox(bbox, network_type="drive", truncate_by_edge=True)
+            if len(list(G.edges)) == 0:
+                raise ValueError("No se encontraron vías transitables en el área seleccionada")
+            print(f"Base cartográfica descargada desde: {endpoint}")
+            return G
+        except Exception as e:
+            ultimo_error = e
+            print(f"Fallo con endpoint {endpoint}: {e}")
+            time.sleep(2)
+    raise ultimo_error
 
 def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida):
 
@@ -25,9 +51,9 @@ def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida
         #final_dxf_path = os.path.join(final_dxf_path_carto, "manzanas_con_calles.dxf")
 
         try:
-            # Crear el grafo usando el bounding box
+            # Crear el grafo usando el bounding box (con failover entre espejos de Overpass)
             bbox = (lon_min, lat_min, lon_max, lat_max)
-            G = ox.graph.graph_from_bbox(bbox, network_type="drive", truncate_by_edge=True)
+            G = _descargar_grafo_bbox(bbox)
 
             if len(list(G.edges)) == 0:
                 raise ValueError("No se encontraron vías transitables en el área seleccionada")
