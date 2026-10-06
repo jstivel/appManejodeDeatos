@@ -9,6 +9,7 @@ import math
 import pyogrio
 import tempfile
 import os
+import traceback
 import kmz_to_cad
 
 def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida):
@@ -27,6 +28,9 @@ def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida
             # Crear el grafo usando el bounding box
             bbox = (lon_min, lat_min, lon_max, lat_max)
             G = ox.graph.graph_from_bbox(bbox, network_type="drive", truncate_by_edge=True)
+
+            if len(list(G.edges)) == 0:
+                raise ValueError("No se encontraron vías transitables en el área seleccionada")
 
             nodes, edges = ox.graph_to_gdfs(G)
             edges = edges[edges.geometry.notnull() & edges.geometry.is_valid]
@@ -48,7 +52,9 @@ def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida
 
             # Unir polígonos y manejar MultiPolígonos
             manzanas_union = unary_union(manzanas)
-            manzanas_finales = list(manzanas_union) if isinstance(manzanas_union, MultiPolygon) else [manzanas_union]
+            if manzanas_union.is_empty:
+                raise ValueError("No se pudieron generar manzanas a partir de las vías del área seleccionada")
+            manzanas_finales = list(manzanas_union.geoms) if isinstance(manzanas_union, MultiPolygon) else [manzanas_union]
 
             # Crear GeoDataFrame y guardar como GeoPackage
             gdf_manzanas = gpd.GeoDataFrame(geometry=[p.boundary for p in manzanas_finales])
@@ -73,45 +79,58 @@ def catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,formato_salida
             processed_edges = set()
 
             for _, row in edges.iterrows():
-                if 'name' in row and row['name']:
-                    osmid = tuple(row['osmid']) if isinstance(row['osmid'], list) else row['osmid']
-                    if osmid not in processed_edges:
-                        line = row['geometry']
-                        if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
-                            x1, y1 = line.coords[0]
-                            x2, y2 = line.coords[1]
+                nombre_calle = row.get('name')
+                if nombre_calle is None:
+                    continue
+                if isinstance(nombre_calle, float) and math.isnan(nombre_calle):
+                    continue
+                if isinstance(nombre_calle, (list, tuple)):
+                    nombre_calle = nombre_calle[0] if nombre_calle else None
+                    if not nombre_calle:
+                        continue
+                nombre_calle = str(nombre_calle).strip()
+                if not nombre_calle:
+                    continue
 
-                            x1_magna, y1_magna = kmz_to_cad.convertir_a_magna_sirgas(float(x1), float(y1))
-                            x2_magna, y2_magna = kmz_to_cad.convertir_a_magna_sirgas(float(x2), float(y2))
+                osmid = tuple(row['osmid']) if isinstance(row['osmid'], list) else row['osmid']
+                if osmid not in processed_edges:
+                    line = row['geometry']
+                    if formato_salida == "MAGNA-SIRGAS / Colombia West zone EPSG:3115":
+                        x1, y1 = line.coords[0]
+                        x2, y2 = line.coords[1]
 
-                            angle = math.degrees(math.atan2(y2_magna - y1_magna, x2_magna - x1_magna))
-                            mid_x_magna = (x1_magna + x2_magna) / 2
-                            mid_y_magna = (y1_magna + y2_magna) / 2
+                        x1_magna, y1_magna = kmz_to_cad.convertir_a_magna_sirgas(float(x1), float(y1))
+                        x2_magna, y2_magna = kmz_to_cad.convertir_a_magna_sirgas(float(x2), float(y2))
 
-                            msp.add_text(
-                                row['name'],
-                                dxfattribs={
-                                "height": 2,
-                                "rotation": angle,  # Rotación del texto
-                                "insert":(mid_x_magna, mid_y_magna),"layer":"Calles"
-                                })  
-                            processed_edges.add(osmid)
-                            
-                        else:                            
-                            x1, y1 = line.coords[0]
-                            x2, y2 = line.coords[1]
-                            angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
-                            mid_point = line.interpolate(0.5, normalized=True)
-                            msp.add_text(row['name'], dxfattribs={'height': 0.00002, 'rotation': angle,"layer":"Calles"}).set_placement(
-                                (mid_point.x, mid_point.y), align=TextEntityAlignment.MIDDLE_CENTER)
-                            processed_edges.add(osmid)
+                        angle = math.degrees(math.atan2(y2_magna - y1_magna, x2_magna - x1_magna))
+                        mid_x_magna = (x1_magna + x2_magna) / 2
+                        mid_y_magna = (y1_magna + y2_magna) / 2
+
+                        msp.add_text(
+                            nombre_calle,
+                            dxfattribs={
+                            "height": 2,
+                            "rotation": angle,  # Rotación del texto
+                            "insert":(mid_x_magna, mid_y_magna),"layer":"Calles"
+                            })
+                        processed_edges.add(osmid)
+
+                    else:
+                        x1, y1 = line.coords[0]
+                        x2, y2 = line.coords[1]
+                        angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
+                        mid_point = line.interpolate(0.5, normalized=True)
+                        msp.add_text(nombre_calle, dxfattribs={'height': 0.00002, 'rotation': angle,"layer":"Calles"}).set_placement(
+                            (mid_point.x, mid_point.y), align=TextEntityAlignment.MIDDLE_CENTER)
+                        processed_edges.add(osmid)
 
             doc.saveas(final_dxf_path_carto)
             print(f"Archivo final DXF guardado temporalmente en: {final_dxf_path_carto}")
+            return True
 
-            # Retorna la ruta del DXF final para su uso posterior
-            #return final_dxf_path
         except Exception as e:
             print(f"Error durante la ejecución: {e}")
-            return st.error(f"Error al procesar el archivo kmz, revisa que los puntos esten dentro de un area con carreteras")
+            traceback.print_exc()
+            st.error(f"Error al generar la base cartográfica: {e}")
+            return False
 

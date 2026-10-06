@@ -63,12 +63,18 @@ def add_mapping(longitudes,latitudes,output_format,dxf_path):
    
     temp_dxf = tempfile.NamedTemporaryFile(delete=False, suffix=".dxf")  # Crea el archivo temporal
     final_dxf_path_carto = temp_dxf.name  # Guardar la ruta del archivo temporal
+    temp_dxf.close()
     
     lat_min = min(latitudes) - 0.005
     lat_max = max(latitudes) + 0.005
     lon_min = min(longitudes) - 0.005
     lon_max = max(longitudes) + 0.005 
-    cartografia.catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,output_format)
+
+    ok = cartografia.catograf(lon_min,lat_min,lon_max,lat_max,final_dxf_path_carto,output_format)
+    if not ok or not os.path.exists(final_dxf_path_carto) or os.path.getsize(final_dxf_path_carto) == 0:
+        if os.path.exists(final_dxf_path_carto):
+            os.remove(final_dxf_path_carto)
+        return None
     
     # Leer el archivo DXF basado en la plantilla 
     doc_template = ezdxf.readfile(dxf_path)   
@@ -136,13 +142,16 @@ def draw_blocks (coordinates,msp,output_format,block_name,layer_name):
             name,
             dxfattribs={"insert": (x-disface_x, y+disface_y), "char_height": height,"layer":"Text"},
         )  
-def trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_path,template_dwg):
+def trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_path,template_dwg,origen="KMZ"):
     try:      
         distances,latitudes, longitudes = process_distance_long_lat(coordinates)             
 
         with BytesIO() as output:                               
             if add_cartography:                            
-                doc,msp,final_dxf_path_carto = add_mapping(longitudes,latitudes,output_format,dxf_path)
+                result = add_mapping(longitudes,latitudes,output_format,dxf_path)
+                if result is None:
+                    return
+                doc,msp,final_dxf_path_carto = result
             else:  
                 doc = ezdxf.readfile(dxf_path)
                 msp = doc.modelspace()
@@ -155,7 +164,8 @@ def trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_
             doc.saveas(dxf_path)
             with open(dxf_path, "rb") as nuevo_dxf_file:
                 output.write(nuevo_dxf_file.read())
-            os.remove(dxf_path) 
+            if os.path.exists(dxf_path):
+                os.remove(dxf_path) 
             output.seek(0)
             #os.remove(final_dxf_path_carto)           
             # Crear el botón de descarga en Streamlit
@@ -166,8 +176,7 @@ def trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_
                 mime="application/dxf"  # Tipo MIME del archivo DXF
             )    
     except Exception as e:
-            st.error(f"Error al procesar el archivo CSV, revise que contenga los campos nombre,latitud y longitud: {e}")
-            #print(f"\033[31m{distances}\033[0m")          
+            st.error(f"Error al procesar el archivo {origen}: {e}")          
 
 # Interfaz de Streamlit
 def main():
@@ -240,14 +249,14 @@ def main():
         elif csv_file and template_dwg:
             try:
                 coordinates= process_csv(csv_file)
-                trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_path,template_dwg)
+                trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_path,template_dwg,origen="CSV")
             except Exception as e:
                     st.error(f"Error al procesar el archivo CSV: {e}")
                     
         elif kmz_file and template_dwg:               
             try:
                coordinates = extraer_coordenadas_de_kmz(kmz_file,output_format)  
-               trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_path,template_dwg)
+               trigger(coordinates,add_cartography,layer_name,output_format,block_name,dxf_path,template_dwg,origen="KMZ")
             except Exception as e:
                     st.error(f"Error al procesar el archivo KMZ: {e}")
                     #print(f"\033[31m{distances}\033[0m")                     
